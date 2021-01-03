@@ -1,48 +1,97 @@
 import requests
+import cassiopeia as cass
+import pandas as pd
 
+key = input("Sua chave da API: ")
+#ammount_pages = int(input("Número de páginas de players: "))
+#elos = [e if e != "" for e int input("Elos em CapsLock separador por espaço: ").split()] # elo in CAPS
+#divs = [e if e != "" for e int input("Divisões em números romanos: ").split()] # I II III IV
+cass.set_riot_api_key(key)
 
-key = input()
-ammount_pages = int(input())
-elos = [e if e != "" for e int input().split()] # elo in CAPS
-divs = [e if e != "" for e int input().split()] # I II III IV
+ammount_pages = 1
+elos = ["SILVER"]
+divs = ["IV"]
 queue = "RANKED_SOLO_5x5"
-
 regiao = "https://br1.api.riotgames.com"
 
 # Dados dos jogadores
 data = None 
-for page in range(ammount_pages):
+for page in range(1,ammount_pages+1):
     for elo in elos:
         for div in divs:
             players = requests.get(f'{regiao}/lol/league/v4/entries/{queue}/{elo}/{div}?page={page}&api_key={key}')
             data = pd.DataFrame(players.json())
-            data.to_csv(f"{div}-{tier}-{page}.csv")
+            data.to_csv(f"{elo}-{div}-{page}.csv")
 
-# Dados do jogos dos jogadores
-games = None
+
+finalDf = None
 for player in data.loc[:,'summonerName']:
-    query = requests.get(f'{regiao}/lol/summoner/v4/summoners/by-name/{player}?api_key={key}')
-    if query.status_code != 200:
-        continue
-    info = pd.DataFrame([query.json()])
-    accountId_player = info.accountId.values[0]
-    query = requests.get(f'{regiao}/lol/match/v4/matchlists/by-account/{accountId_player}?api_key={key}')
-    if query.status_code != 200:
-        continue
-    info = pd.DataFrame(query.json()[0])
-    indexes = np.random.randint(info.shape[0], size = 10)
-    info = info.loc[indexes,:]
-    if games == None:
-        games = pd.DataFrame(columns=info.columns)
-    games = pd.merge(games, info, how='outer')
-games.to_csv("games.csv")
+    summoner = cass.Summoner(name=player, region="BR")
+    match = cass.MatchHistory(summoner=summoner, queues = [cass.Queue(queue)])
+    for matchId in range(20):
+        try:
+            targetMatch = match[matchId]
+            matchData = {}
+            if not targetMatch.is_remake:
+                matchData['match_duration'] = targetMatch.duration.seconds
+                for team in targetMatch.teams:
+                    if team.win:
+                        matchData['team_win'] = team.side.name 
+                    side = team.side.name+'_team_' 
+                    matchData[side+'barons'] = team.baron_kills
+                    matchData[side+'heralds'] = team.rift_herald_kills
+                    matchData[side+'dragons'] = team.dragon_kills
+                    matchData[side+'towers'] = team.tower_kills
+                    matchData[side+'inhibitors'] = team.inhibitor_kills
+                    # inicializando variáveis individuais 
+                    matchData[side+'kills'] = 0
+                    matchData[side+'assists'] = 0
+                    matchData[side+'deaths'] = 0
+                    matchData[side+'damage_dealt_objectives'] = 0
+                    matchData[side+'damage_dealt_towers'] = 0
+                    matchData[side+'damage_self_mitigated'] = 0
+                    matchData[side+'physical_damage_dealt'] = 0
+                    matchData[side+'magic_damage_dealt'] = 0
+                    matchData[side+'total_gold_earned'] = 0
+                    matchData[side+'vision_score'] = 0
+                    matchData[side+'time_crowd_control_dealt'] = 0
+                    matchData[side+'cs_permin_0-10'] = 0
+                    matchData[side+'cs_permin_10-20'] = 0
+                    matchData[side+'xp_permin_0-10'] = 0
+                    matchData[side+'xp_permin_10-20'] = 0
+                    for participant in team.participants:
+                        stats = participant.stats
+                        tl = participant.timeline 
+                        matchData[side+'kills'] += stats.kills
+                        matchData[side+'assists'] += stats.assists
+                        matchData[side+'deaths'] += stats.deaths
+                        matchData[side+'damage_dealt_objectives'] += stats.damage_dealt_to_objectives
+                        matchData[side+'damage_dealt_towers'] += stats.damage_dealt_to_turrets
+                        matchData[side+'damage_self_mitigated'] += stats.damage_self_mitigated
+                        matchData[side+'physical_damage_dealt'] += stats.physical_damage_dealt_to_champions
+                        matchData[side+'magic_damage_dealt'] += stats.magic_damage_dealt_to_champions
+                        matchData[side+'total_gold_earned'] += stats.gold_earned
+                        matchData[side+'vision_score'] += stats.vision_score
+                        matchData[side+'time_crowd_control_dealt'] += stats.total_time_crowd_control_dealt
+                        cs = tl.creeps_per_min_deltas
+                        for key in cs.keys():
+                            if key == '0-10':
+                                matchData[side+'cs_permin_0-10'] = cs[key]
+                                matchData[side+'cs_permin_10-20'] = cs[key]
+                            elif key == '10-20':
+                                matchData[side+'cs_permin_10-20'] += cs[key]
+                        xp = tl.xp_per_min_deltas
+                        for key in xp.keys():
+                            if key == '0-10':
+                                matchData[side+'xp_permin_0-10'] += xp[key]
+                                matchData[side+'xp_permin_10-20'] += xp[key]
+                            elif key == '10-20':
+                                matchData[side+'xp_permin_10-20'] += xp[key]
 
-# Procurando por informações dos Jogos
-## games.
-# query = requests.get(f'{regiao}/lol/match/v4/timelines/by-match/{gameId}?api_key={key}')
-finalDf = 
-for gameId in gamesloc[:,'gameId']:
-    query = requests.get(f'{regiao}/lol/match/v4/timelines/by-match/{gameId}?api_key={key}')
-    if query.status_code !=200:
-        continue
-    
+            if type(finalDf) == type(None):
+                finalDf = pd.DataFrame(columns=matchData.keys())
+                finalDf = pd.merge(finalDf, pd.DataFrame([matchData]), how='outer' )
+                continue
+            finalDf = pd.merge(finalDf, pd.DataFrame([matchData]), how='outer' )
+            finalDf.to_csv('final_data.csv', index=False)
+        finally:

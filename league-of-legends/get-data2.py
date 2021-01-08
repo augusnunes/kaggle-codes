@@ -16,17 +16,18 @@ queue = "RANKED_SOLO_5x5"
 regiao = "https://br1.api.riotgames.com"
 
 # Dados dos jogadores
-data = None 
-for page in range(1,ammount_pages+1):
-    for elo in elos:
-        for div in divs:
-            players = requests.get(f'{regiao}/lol/league/v4/entries/{queue}/{elo}/{div}?page={page}&api_key={key}')
-            data = pd.DataFrame(players.json())
-            data.to_csv(f"{elo}-{div}-{page}.csv")
+# data = None 
+# for page in range(1,ammount_pages+1):
+#     for elo in elos:
+#         for div in divs:
+#             players = requests.get(f'{regiao}/lol/league/v4/entries/{queue}/{elo}/{div}?page={page}&api_key={key}')
+#             data = pd.DataFrame(players.json())
+#             data.to_csv(f"{elo}-{div}-{page}.csv")
 
+data = pd.read_csv("SILVER-IV-1.csv")
 
 finalDf = None
-for player in data.loc[12:,'summonerName']:
+for player in data.loc[63:,'summonerName']:
     try:
         summoner = cass.Summoner(name=player, region="BR")
         match = cass.MatchHistory(summoner=summoner, queues = [cass.Queue(queue)])
@@ -97,7 +98,7 @@ for player in data.loc[12:,'summonerName']:
                 finalDf = pd.merge(finalDf, pd.DataFrame([matchData]), how='outer' )
                 finalDf.to_csv('final_data.csv', index=False)
             except:
-                time.sleep(60*2)
-        time.sleep(60*2)
+                continue
+        
     except:
-        time.sleep(60*2)
+        continue
